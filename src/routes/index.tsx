@@ -974,3 +974,427 @@ function FieldRow({
     </div>
   );
 }
+
+// ===================== Rows board with drag-and-drop =====================
+
+function RowsBoard({
+  rows,
+  fields,
+  activePerson,
+  accent,
+  entryMap,
+  onSaveEntry,
+}: {
+  rows: ForecastRow[];
+  fields: ForecastField[];
+  activePerson: Salesperson;
+  accent: string;
+  entryMap: Map<string, ForecastEntry>;
+  onSaveEntry: (field: ForecastField, value: string) => void;
+}) {
+  const qc = useQueryClient();
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Group fields by row_id (fallback bucket for null)
+  const fieldsByRow = useMemo(() => {
+    const m = new Map<string, ForecastField[]>();
+    rows.forEach((r) => m.set(r.id, []));
+    const unassigned: ForecastField[] = [];
+    fields.forEach((f) => {
+      if (f.row_id && m.has(f.row_id)) m.get(f.row_id)!.push(f);
+      else unassigned.push(f);
+    });
+    return { m, unassigned };
+  }, [rows, fields]);
+
+  const addRowM = useMutation({
+    mutationFn: async () => {
+      const sort_order = (rows.at(-1)?.sort_order ?? 0) + 10;
+      const { error } = await supabase
+        .from("forecast_rows")
+        .insert({ name: `Row ${rows.length + 1}`, sort_order });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["forecast_rows"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const renameRowM = useMutation({
+    mutationFn: async (args: { id: string; name: string }) => {
+      const { error } = await supabase
+        .from("forecast_rows")
+        .update({ name: args.name })
+        .eq("id", args.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["forecast_rows"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteRowM = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("forecast_rows").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["forecast_rows"] });
+      qc.invalidateQueries({ queryKey: ["fields"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const updateFieldM = useMutation({
+    mutationFn: async (args: { id: string; patch: Partial<ForecastField> }) => {
+      const { error } = await supabase
+        .from("forecast_fields")
+        .update(args.patch)
+        .eq("id", args.id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["fields"] }),
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  // Helper: locate field's container (row id) and index
+  const findContainer = (id: string): string | null => {
+    if (rows.some((r) => r.id === id)) return id;
+    for (const r of rows) {
+      if (fieldsByRow.m.get(r.id)?.some((f) => f.id === id)) return r.id;
+    }
+    return null;
+  };
+
+  function handleDragStart(e: DragStartEvent) {
+    setActiveId(String(e.active.id));
+  }
+
+  async function handleDragEnd(e: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = e;
+    if (!over) return;
+    const activeIdStr = String(active.id);
+    const overIdStr = String(over.id);
+    if (activeIdStr === overIdStr) return;
+
+    const fromRow = findContainer(activeIdStr);
+    const toRow = findContainer(overIdStr) ?? (rows.some((r) => r.id === overIdStr) ? overIdStr : null);
+    if (!fromRow || !toRow) return;
+
+    const fromList = [...(fieldsByRow.m.get(fromRow) ?? [])];
+    const toList = fromRow === toRow ? fromList : [...(fieldsByRow.m.get(toRow) ?? [])];
+
+    const fromIdx = fromList.findIndex((f) => f.id === activeIdStr);
+    if (fromIdx === -1) return;
+    const [moved] = fromList.splice(fromIdx, 1);
+
+    let insertIdx: number;
+    if (rows.some((r) => r.id === overIdStr)) {
+      // dropped onto empty row container
+      insertIdx = toList.length;
+    } else {
+      insertIdx = toList.findIndex((f) => f.id === overIdStr);
+      if (insertIdx === -1) insertIdx = toList.length;
+    }
+    toList.splice(insertIdx, 0, moved);
+
+    // Recompute sort_orders for affected list(s)
+    const updates: Array<{ id: string; patch: Partial<ForecastField> }> = [];
+    if (fromRow === toRow) {
+      toList.forEach((f, i) => {
+        const newSort = (i + 1) * 10;
+        if (f.sort_order !== newSort || f.row_id !== toRow) {
+          updates.push({ id: f.id, patch: { sort_order: newSort, row_id: toRow } });
+        }
+      });
+    } else {
+      fromList.forEach((f, i) => {
+        const newSort = (i + 1) * 10;
+        if (f.sort_order !== newSort) {
+          updates.push({ id: f.id, patch: { sort_order: newSort } });
+        }
+      });
+      toList.forEach((f, i) => {
+        const newSort = (i + 1) * 10;
+        if (f.sort_order !== newSort || f.row_id !== toRow) {
+          updates.push({ id: f.id, patch: { sort_order: newSort, row_id: toRow } });
+        }
+      });
+    }
+
+    // Optimistic update
+    qc.setQueryData<ForecastField[]>(["fields"], (prev) => {
+      if (!prev) return prev;
+      const map = new Map(prev.map((p) => [p.id, p]));
+      updates.forEach((u) => {
+        const cur = map.get(u.id);
+        if (cur) map.set(u.id, { ...cur, ...u.patch } as ForecastField);
+      });
+      return Array.from(map.values()).sort(
+        (a, b) => a.sort_order - b.sort_order,
+      );
+    });
+
+    for (const u of updates) updateFieldM.mutate(u);
+    // arrayMove import retained for potential future row reorder
+    void arrayMove;
+  }
+
+  const activeField = activeId ? fields.find((f) => f.id === activeId) : null;
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="mt-5 space-y-6">
+        {rows.map((row) => {
+          const rowFields = fieldsByRow.m.get(row.id) ?? [];
+          return (
+            <RowSection
+              key={row.id}
+              row={row}
+              accent={accent}
+              onRename={(name) => renameRowM.mutate({ id: row.id, name })}
+              onDelete={() => {
+                if (
+                  rowFields.length > 0
+                    ? confirm(
+                        `Delete "${row.name}"? ${rowFields.length} widget(s) inside will become unassigned.`,
+                      )
+                    : confirm(`Delete "${row.name}"?`)
+                ) {
+                  deleteRowM.mutate(row.id);
+                }
+              }}
+            >
+              <SortableContext
+                items={rowFields.map((f) => f.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div
+                  className="grid min-h-[120px] gap-3 rounded-2xl border border-dashed border-border/60 bg-muted/20 p-3 sm:grid-cols-2 lg:grid-cols-3"
+                  data-row-id={row.id}
+                >
+                  {rowFields.length === 0 && (
+                    <DropZonePlaceholder rowId={row.id} />
+                  )}
+                  {rowFields.map((field) => {
+                    const entry = entryMap.get(`${activePerson.id}:${field.id}`);
+                    return (
+                      <SortableFieldCard
+                        key={field.id}
+                        field={field}
+                        entry={entry}
+                        accent={accent}
+                        onSave={(v) => onSaveEntry(field, v)}
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </RowSection>
+          );
+        })}
+
+        {fieldsByRow.unassigned.length > 0 && (
+          <div className="rounded-2xl border bg-card p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Unassigned
+            </p>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {fieldsByRow.unassigned.map((field) => {
+                const entry = entryMap.get(`${activePerson.id}:${field.id}`);
+                return (
+                  <FieldCard
+                    key={field.id}
+                    field={field}
+                    entry={entry}
+                    accent={accent}
+                    onSave={(v) => onSaveEntry(field, v)}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => addRowM.mutate()}
+            className="rounded-full border-dashed"
+          >
+            <Plus className="mr-1 h-4 w-4" /> Add row
+          </Button>
+        </div>
+
+        {fields.length === 0 && (
+          <EmptyState
+            title="No forecast fields yet"
+            body='Click "Manage fields" above to add the blocks you want to track every week.'
+          />
+        )}
+      </div>
+
+      <DragOverlay>
+        {activeField ? (
+          <div className="opacity-90">
+            <FieldCard
+              field={activeField}
+              entry={entryMap.get(`${activePerson.id}:${activeField.id}`)}
+              accent={accent}
+              onSave={() => {}}
+            />
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
+function RowSection({
+  row,
+  accent,
+  onRename,
+  onDelete,
+  children,
+}: {
+  row: ForecastRow;
+  accent: string;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+  children: React.ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(row.name);
+  useEffect(() => setName(row.name), [row.name]);
+
+  return (
+    <div>
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className="h-2 w-2 shrink-0 rounded-full"
+          style={{ backgroundColor: accent }}
+        />
+        {editing ? (
+          <div className="flex flex-1 items-center gap-1">
+            <Input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  if (name.trim()) onRename(name.trim());
+                  setEditing(false);
+                } else if (e.key === "Escape") {
+                  setName(row.name);
+                  setEditing(false);
+                }
+              }}
+              className="h-8 max-w-xs font-display text-base font-semibold"
+            />
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={() => {
+                if (name.trim()) onRename(name.trim());
+                setEditing(false);
+              }}
+            >
+              <Check className="h-4 w-4" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              onClick={() => {
+                setName(row.name);
+                setEditing(false);
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <>
+            <h3 className="font-display text-base font-bold text-foreground">{row.name}</h3>
+            <button
+              onClick={() => setEditing(true)}
+              className="rounded p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Rename row"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={onDelete}
+              className="rounded p-1 text-muted-foreground hover:text-destructive"
+              aria-label="Delete row"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DropZonePlaceholder({ rowId }: { rowId: string }) {
+  // Empty sortable item so drag can target an empty row via row id
+  const { setNodeRef, isOver } = useSortable({ id: rowId });
+  return (
+    <div
+      ref={setNodeRef}
+      className={`col-span-full flex h-20 items-center justify-center rounded-xl border border-dashed text-xs text-muted-foreground transition ${
+        isOver ? "border-primary bg-primary/5 text-primary" : ""
+      }`}
+    >
+      Drop widget here
+    </div>
+  );
+}
+
+function SortableFieldCard(props: {
+  field: ForecastField;
+  entry: ForecastEntry | undefined;
+  accent: string;
+  onSave: (v: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.field.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      <button
+        {...attributes}
+        {...listeners}
+        className="absolute right-2 top-2 z-10 rounded-md p-1 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+        aria-label="Drag to reorder"
+        type="button"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <FieldCard
+        field={props.field}
+        entry={props.entry}
+        accent={props.accent}
+        onSave={props.onSave}
+      />
+    </div>
+  );
+}

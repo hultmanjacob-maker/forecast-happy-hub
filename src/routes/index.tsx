@@ -159,6 +159,19 @@ function ForecastPage() {
     },
   });
 
+  const rowsQ = useQuery({
+    queryKey: ["forecast_rows"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("forecast_rows")
+        .select("*")
+        .order("sort_order")
+        .order("created_at");
+      if (error) throw error;
+      return data as ForecastRow[];
+    },
+  });
+
   const fieldsQ = useQuery({
     queryKey: ["fields"],
     queryFn: async () => {

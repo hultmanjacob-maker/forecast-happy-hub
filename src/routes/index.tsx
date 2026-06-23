@@ -837,14 +837,15 @@ function ManageFieldsDialog({
 
         <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
           <Label className="text-xs">Add new field</Label>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Input
               placeholder="Field label"
               value={newLabel}
               onChange={(e) => setNewLabel(e.target.value)}
+              className="min-w-[160px] flex-1"
             />
             <Select value={newType} onValueChange={(v) => setNewType(v as "number" | "text")}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -852,9 +853,26 @@ function ManageFieldsDialog({
                 <SelectItem value="text">Text</SelectItem>
               </SelectContent>
             </Select>
+            <Select value={newRowId} onValueChange={setNewRowId}>
+              <SelectTrigger className="w-32">
+                <SelectValue placeholder="Row" />
+              </SelectTrigger>
+              <SelectContent>
+                {rows.map((r) => (
+                  <SelectItem key={r.id} value={r.id}>
+                    {r.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button
               onClick={() =>
-                newLabel.trim() && addM.mutate({ label: newLabel.trim(), field_type: newType })
+                newLabel.trim() &&
+                addM.mutate({
+                  label: newLabel.trim(),
+                  field_type: newType,
+                  row_id: newRowId || null,
+                })
               }
               disabled={!newLabel.trim()}
             >

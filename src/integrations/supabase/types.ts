@@ -68,6 +68,7 @@ export type Database = {
           field_type: string
           id: string
           label: string
+          row_id: string | null
           sort_order: number
         }
         Insert: {
@@ -75,6 +76,7 @@ export type Database = {
           field_type: string
           id?: string
           label: string
+          row_id?: string | null
           sort_order?: number
         }
         Update: {
@@ -82,6 +84,36 @@ export type Database = {
           field_type?: string
           id?: string
           label?: string
+          row_id?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecast_fields_row_id_fkey"
+            columns: ["row_id"]
+            isOneToOne: false
+            referencedRelation: "forecast_rows"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forecast_rows: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
           sort_order?: number
         }
         Relationships: []

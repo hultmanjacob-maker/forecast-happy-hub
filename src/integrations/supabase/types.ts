@@ -88,18 +88,21 @@ export type Database = {
       }
       salespeople: {
         Row: {
+          color_index: number
           created_at: string
           id: string
           name: string
           sort_order: number
         }
         Insert: {
+          color_index?: number
           created_at?: string
           id?: string
           name: string
           sort_order?: number
         }
         Update: {
+          color_index?: number
           created_at?: string
           id?: string
           name?: string

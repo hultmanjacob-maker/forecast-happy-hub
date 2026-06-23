@@ -14,7 +14,99 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      forecast_entries: {
+        Row: {
+          field_id: string
+          id: string
+          salesperson_id: string
+          updated_at: string
+          value_number: number | null
+          value_text: string | null
+          week: number
+          year: number
+        }
+        Insert: {
+          field_id: string
+          id?: string
+          salesperson_id: string
+          updated_at?: string
+          value_number?: number | null
+          value_text?: string | null
+          week: number
+          year: number
+        }
+        Update: {
+          field_id?: string
+          id?: string
+          salesperson_id?: string
+          updated_at?: string
+          value_number?: number | null
+          value_text?: string | null
+          week?: number
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "forecast_entries_field_id_fkey"
+            columns: ["field_id"]
+            isOneToOne: false
+            referencedRelation: "forecast_fields"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "forecast_entries_salesperson_id_fkey"
+            columns: ["salesperson_id"]
+            isOneToOne: false
+            referencedRelation: "salespeople"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      forecast_fields: {
+        Row: {
+          created_at: string
+          field_type: string
+          id: string
+          label: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          field_type: string
+          id?: string
+          label: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          field_type?: string
+          id?: string
+          label?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      salespeople: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

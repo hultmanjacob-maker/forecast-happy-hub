@@ -10,6 +10,19 @@ import {
   Pencil,
   CalendarDays,
   GripVertical,
+  TrendingUp,
+  Target,
+  CheckCircle2,
+  Zap,
+  Users,
+  BarChart3,
+  UserPlus,
+  Wallet,
+  AlertTriangle,
+  ShieldAlert,
+  LifeBuoy,
+  Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,10 +69,10 @@ import {
   formatDKK,
   nextWeek,
   prevWeek,
-  weekKey,
   weekRangeLabel,
   type WeekId,
 } from "@/lib/week";
+import { getSalesColor, initials, SALES_COLORS } from "@/lib/sales-colors";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -71,7 +84,7 @@ export const Route = createFileRoute("/")({
   component: ForecastPage,
 });
 
-type Salesperson = { id: string; name: string; sort_order: number };
+type Salesperson = { id: string; name: string; sort_order: number; color_index: number };
 type ForecastField = {
   id: string;
   label: string;
@@ -87,6 +100,22 @@ type ForecastEntry = {
   value_number: number | null;
   value_text: string | null;
 };
+
+function iconForField(label: string): LucideIcon {
+  const l = label.toLowerCase();
+  if (l.includes("commit")) return Target;
+  if (l.includes("best")) return TrendingUp;
+  if (l.includes("closed")) return CheckCircle2;
+  if (l.includes("expected") && l.includes("close")) return Zap;
+  if (l.includes("current onlines")) return Users;
+  if (l.includes("new onlines")) return UserPlus;
+  if (l.includes("expected")) return BarChart3;
+  if (l.includes("pipeline gap")) return AlertTriangle;
+  if (l.includes("pipeline")) return Wallet;
+  if (l.includes("risk")) return ShieldAlert;
+  if (l.includes("help")) return LifeBuoy;
+  return Sparkles;
+}
 
 function ForecastPage() {
   const [week, setWeek] = useState<WeekId>(() => currentWeekId());
@@ -133,7 +162,6 @@ function ForecastPage() {
     },
   });
 
-  // Auto-select first salesperson
   useEffect(() => {
     if (!activeSalesperson && salespeopleQ.data?.length) {
       setActiveSalesperson(salespeopleQ.data[0].id);
@@ -177,73 +205,99 @@ function ForecastPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const activePerson = salespeopleQ.data?.find((s) => s.id === activeSalesperson) ?? null;
+  const activeColor = activePerson ? getSalesColor(activePerson.color_index) : null;
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-6xl px-4 py-6 sm:py-10">
-        <Header
-          week={week}
-          onPrev={() => setWeek(prevWeek(week))}
-          onNext={() => setWeek(nextWeek(week))}
-          onToday={() => setWeek(currentWeekId())}
-        />
+      <HeroHeader
+        week={week}
+        onPrev={() => setWeek(prevWeek(week))}
+        onNext={() => setWeek(nextWeek(week))}
+        onToday={() => setWeek(currentWeekId())}
+      />
 
-        <div className="mt-8">
+      <main className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
+        <section className="-mt-10 rounded-2xl border bg-card p-4 shadow-[var(--shadow-elegant)] sm:p-5">
           <SalespeopleTabs
             people={salespeopleQ.data ?? []}
             active={activeSalesperson}
             onSelect={setActiveSalesperson}
           />
-        </div>
+        </section>
 
-        <div className="mt-6 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-muted-foreground">
-            {activeSalesperson
-              ? "Weekly forecast inputs"
-              : "Add a salesperson to start forecasting"}
-          </h2>
-          <ManageFieldsDialog fields={fieldsQ.data ?? []} />
-        </div>
+        {activePerson && activeColor && (
+          <section
+            className="mt-6 flex flex-col gap-4 rounded-2xl border p-5 shadow-[var(--shadow-elegant)] sm:flex-row sm:items-center sm:justify-between"
+            style={{
+              backgroundColor: activeColor.soft,
+              borderColor: `${activeColor.solid}33`,
+            }}
+          >
+            <div className="flex items-center gap-4">
+              <Avatar person={activePerson} size={56} ring />
+              <div>
+                <p
+                  className="text-[11px] font-semibold uppercase tracking-[0.18em]"
+                  style={{ color: activeColor.solid }}
+                >
+                  Forecasting for
+                </p>
+                <h2 className="font-display text-2xl font-bold text-foreground sm:text-3xl">
+                  {activePerson.name}
+                </h2>
+                <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                  Week {week.week} · {weekRangeLabel(week)}
+                </p>
+              </div>
+            </div>
+            <ManageFieldsDialog fields={fieldsQ.data ?? []} />
+          </section>
+        )}
 
-        {activeSalesperson && (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {activePerson && activeColor && (
+          <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {(fieldsQ.data ?? []).map((field) => {
-              const entry = entryMap.get(`${activeSalesperson}:${field.id}`);
+              const entry = entryMap.get(`${activePerson.id}:${field.id}`);
               return (
                 <FieldCard
                   key={field.id}
                   field={field}
                   entry={entry}
+                  accent={activeColor.solid}
                   onSave={(value) =>
-                    saveEntry.mutate({ salespersonId: activeSalesperson, field, value })
+                    saveEntry.mutate({ salespersonId: activePerson.id, field, value })
                   }
                 />
               );
             })}
             {fieldsQ.data && fieldsQ.data.length === 0 && (
-              <div className="col-span-full rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                No forecast fields yet. Click <span className="font-medium">Manage fields</span> to
-                add some.
-              </div>
+              <EmptyState
+                title="No forecast fields yet"
+                body='Click "Manage fields" above to add the blocks you want to track every week.'
+              />
             )}
-          </div>
+          </section>
         )}
 
-        {!activeSalesperson && (
-          <div className="mt-4 rounded-lg border border-dashed p-10 text-center text-sm text-muted-foreground">
-            No salespeople yet. Use the <span className="font-medium">+ Add salesperson</span>{" "}
-            button above.
-          </div>
+        {!activePerson && (
+          <section className="mt-6">
+            <EmptyState
+              title="No salespeople yet"
+              body='Use "+ Add salesperson" above to create the first one. Each person gets their own color.'
+            />
+          </section>
         )}
 
         <footer className="mt-12 text-center text-xs text-muted-foreground">
-          Industrial vacation weeks 29, 30, 31 are skipped automatically.
+          Industrial vacation weeks 29, 30 and 31 are skipped automatically.
         </footer>
-      </div>
+      </main>
     </div>
   );
 }
 
-function Header({
+function HeroHeader({
   week,
   onPrev,
   onNext,
@@ -255,34 +309,103 @@ function Header({
   onToday: () => void;
 }) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Weekly Sales Forecast
-        </p>
-        <h1 className="mt-1 text-3xl font-semibold tracking-tight text-foreground">
-          Pipeline & MRR Tracker
-        </h1>
-      </div>
-      <div className="flex items-center gap-2 rounded-lg border bg-card p-1.5 shadow-sm">
-        <Button variant="ghost" size="icon" onClick={onPrev} aria-label="Previous week">
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex min-w-[220px] flex-col items-center px-2">
-          <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-            Week {week.week} · {week.year}
+    <header
+      className="relative overflow-hidden text-[color:var(--cream)]"
+      style={{ background: "var(--gradient-hero)" }}
+    >
+      {/* gold orb */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl"
+        style={{ background: "var(--gradient-gold)" }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-px"
+        style={{ background: "linear-gradient(90deg, transparent, var(--gold), transparent)" }}
+      />
+
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pt-10 pb-20 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:pt-14 sm:pb-24">
+        <div>
+          <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--gold)]">
+            <span className="inline-block h-px w-6 bg-[color:var(--gold)]" />
+            Weekly Sales Forecast
           </div>
-          <div className="text-xs text-muted-foreground tabular-nums">{weekRangeLabel(week)}</div>
+          <h1 className="mt-3 font-display text-4xl font-bold leading-tight text-[color:var(--cream)] sm:text-5xl">
+            Pipeline & MRR <span className="italic text-[color:var(--gold)]">Tracker</span>
+          </h1>
+          <p className="mt-2 max-w-md text-sm text-[color:var(--cream)]/70">
+            One shared place for the team's weekly commit, best-case, and pipeline gap.
+          </p>
         </div>
-        <Button variant="ghost" size="icon" onClick={onNext} aria-label="Next week">
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-        <Button variant="outline" size="sm" onClick={onToday} className="ml-1">
-          Today
-        </Button>
+
+        <div className="flex items-center gap-1 rounded-2xl border border-white/15 bg-white/10 p-1.5 backdrop-blur-md">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onPrev}
+            aria-label="Previous week"
+            className="text-[color:var(--cream)] hover:bg-white/10 hover:text-[color:var(--cream)]"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex min-w-[210px] flex-col items-center px-2">
+            <div className="flex items-center gap-1.5 text-sm font-semibold">
+              <CalendarDays className="h-3.5 w-3.5 text-[color:var(--gold)]" />
+              <span>
+                Week <span className="text-[color:var(--gold)]">{week.week}</span> · {week.year}
+              </span>
+            </div>
+            <div className="text-xs tabular-nums text-[color:var(--cream)]/70">
+              {weekRangeLabel(week)}
+            </div>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onNext}
+            aria-label="Next week"
+            className="text-[color:var(--cream)] hover:bg-white/10 hover:text-[color:var(--cream)]"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            onClick={onToday}
+            className="ml-1 rounded-lg bg-[color:var(--gold)] text-[color:var(--gold-foreground)] hover:bg-[color:var(--gold)]/90"
+          >
+            Today
+          </Button>
+        </div>
       </div>
     </header>
+  );
+}
+
+function Avatar({
+  person,
+  size = 28,
+  ring = false,
+}: {
+  person: Salesperson;
+  size?: number;
+  ring?: boolean;
+}) {
+  const c = getSalesColor(person.color_index);
+  return (
+    <span
+      className="inline-flex shrink-0 items-center justify-center rounded-full font-display font-bold leading-none"
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: c.solid,
+        color: c.fg,
+        fontSize: Math.round(size * 0.4),
+        boxShadow: ring ? `0 0 0 3px ${c.soft}, 0 4px 12px -4px ${c.solid}66` : undefined,
+      }}
+    >
+      {initials(person.name) || "?"}
+    </span>
   );
 }
 
@@ -301,12 +424,17 @@ function SalespeopleTabs({
   const [editing, setEditing] = useState<Salesperson | null>(null);
   const [editName, setEditName] = useState("");
 
+  const nextColorIndex = useMemo(() => {
+    const max = people.reduce((m, p) => Math.max(m, p.color_index), -1);
+    return (max + 1) % SALES_COLORS.length;
+  }, [people]);
+
   const addM = useMutation({
     mutationFn: async (name: string) => {
       const sort_order = (people.at(-1)?.sort_order ?? 0) + 10;
       const { data, error } = await supabase
         .from("salespeople")
-        .insert({ name, sort_order })
+        .insert({ name, sort_order, color_index: nextColorIndex })
         .select()
         .single();
       if (error) throw error;
@@ -354,27 +482,32 @@ function SalespeopleTabs({
     <div className="flex flex-wrap items-center gap-2">
       {people.map((p) => {
         const isActive = p.id === active;
+        const c = getSalesColor(p.color_index);
         return (
           <div
             key={p.id}
-            className={`group flex items-center gap-1 rounded-full border px-1 py-1 text-sm transition-colors ${
-              isActive
-                ? "border-foreground bg-foreground text-background"
-                : "border-border bg-card text-foreground hover:bg-accent"
-            }`}
+            className="group flex items-center gap-1 rounded-full border p-1 pl-1.5 transition-all"
+            style={{
+              backgroundColor: isActive ? c.solid : c.soft,
+              borderColor: isActive ? c.solid : `${c.solid}40`,
+              color: isActive ? c.fg : "var(--foreground)",
+              boxShadow: isActive ? `0 6px 18px -8px ${c.solid}80` : undefined,
+            }}
           >
             <button
               onClick={() => onSelect(p.id)}
-              className="px-3 py-0.5 font-medium tabular-nums"
+              className="flex items-center gap-2 rounded-full pr-2 text-sm font-semibold"
             >
-              {p.name}
+              <Avatar person={p} size={26} />
+              <span>{p.name}</span>
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button
-                  className={`rounded-full p-1 opacity-60 transition hover:opacity-100 ${
-                    isActive ? "hover:bg-background/20" : "hover:bg-muted"
-                  }`}
+                  className="rounded-full p-1 opacity-70 transition hover:opacity-100"
+                  style={{
+                    backgroundColor: isActive ? "rgba(255,255,255,0.18)" : "transparent",
+                  }}
                   aria-label="Salesperson options"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -408,7 +541,11 @@ function SalespeopleTabs({
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogTrigger asChild>
-          <Button variant="outline" size="sm" className="rounded-full">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full border-dashed border-2 bg-transparent"
+          >
             <Plus className="mr-1 h-4 w-4" /> Add salesperson
           </Button>
         </DialogTrigger>
@@ -416,10 +553,10 @@ function SalespeopleTabs({
           <DialogHeader>
             <DialogTitle>Add salesperson</DialogTitle>
             <DialogDescription>
-              They'll appear as a tab. You can rename or remove them later.
+              They'll get a unique color and appear as a tab.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Label htmlFor="sp-name">Name</Label>
             <Input
               id="sp-name"
@@ -431,6 +568,16 @@ function SalespeopleTabs({
                 if (e.key === "Enter" && name.trim()) addM.mutate(name.trim());
               }}
             />
+            <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+              <span>Color:</span>
+              <span
+                className="inline-block h-3.5 w-3.5 rounded-full"
+                style={{ backgroundColor: SALES_COLORS[nextColorIndex].solid }}
+              />
+              <span className="font-medium text-foreground">
+                {SALES_COLORS[nextColorIndex].name}
+              </span>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddOpen(false)}>
@@ -464,7 +611,9 @@ function SalespeopleTabs({
             </Button>
             <Button
               onClick={() =>
-                editing && editName.trim() && renameM.mutate({ id: editing.id, name: editName.trim() })
+                editing &&
+                editName.trim() &&
+                renameM.mutate({ id: editing.id, name: editName.trim() })
               }
             >
               Save
@@ -479,10 +628,12 @@ function SalespeopleTabs({
 function FieldCard({
   field,
   entry,
+  accent,
   onSave,
 }: {
   field: ForecastField;
   entry: ForecastEntry | undefined;
+  accent: string;
   onSave: (value: string) => void;
 }) {
   const initial =
@@ -494,18 +645,32 @@ function FieldCard({
 
   const [value, setValue] = useState(initial);
 
-  // Reset when week/salesperson changes
   useEffect(() => {
     setValue(initial);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry?.id, field.id]);
 
   const dirty = value !== initial;
+  const Icon = iconForField(field.label);
 
   return (
-    <div className="rounded-lg border bg-card p-4 shadow-sm transition-shadow hover:shadow-md">
-      <Label className="text-xs font-medium text-muted-foreground">{field.label}</Label>
-      <div className="mt-2">
+    <div
+      className="group relative overflow-hidden rounded-2xl border bg-card p-4 transition-all hover:-translate-y-0.5 hover:shadow-[var(--shadow-elegant)]"
+      style={{ borderTop: `3px solid ${accent}` }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+          style={{ backgroundColor: `${accent}1f`, color: accent }}
+        >
+          <Icon className="h-4 w-4" />
+        </span>
+        <Label className="mt-1.5 flex-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {field.label}
+        </Label>
+      </div>
+
+      <div className="mt-3">
         {field.field_type === "number" ? (
           <Input
             type="number"
@@ -514,7 +679,7 @@ function FieldCard({
             onChange={(e) => setValue(e.target.value)}
             onBlur={() => dirty && onSave(value)}
             placeholder="0"
-            className="text-lg font-semibold tabular-nums"
+            className="h-11 border-transparent bg-muted/50 text-xl font-bold tabular-nums focus-visible:border-[color:var(--gold)] focus-visible:bg-background"
           />
         ) : (
           <Textarea
@@ -523,14 +688,30 @@ function FieldCard({
             onBlur={() => dirty && onSave(value)}
             placeholder="Add notes…"
             rows={3}
+            className="resize-none border-transparent bg-muted/50 focus-visible:border-[color:var(--gold)] focus-visible:bg-background"
           />
         )}
       </div>
       {field.field_type === "number" && value !== "" && !Number.isNaN(Number(value)) && (
-        <div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
+        <div className="mt-2 text-xs font-semibold tabular-nums text-[color:var(--gold)]">
           {formatDKK(Number(value))}
         </div>
       )}
+    </div>
+  );
+}
+
+function EmptyState({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="col-span-full rounded-2xl border border-dashed bg-card/40 p-10 text-center">
+      <div
+        className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full"
+        style={{ background: "var(--gradient-gold)", color: "var(--gold-foreground)" }}
+      >
+        <Sparkles className="h-5 w-5" />
+      </div>
+      <p className="font-display text-lg font-semibold text-foreground">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
     </div>
   );
 }
@@ -593,13 +774,13 @@ function ManageFieldsDialog({ fields }: { fields: ForecastField[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm">
+        <Button variant="outline" size="sm" className="shrink-0 bg-card/60 backdrop-blur">
           <Settings2 className="mr-1.5 h-4 w-4" /> Manage fields
         </Button>
       </DialogTrigger>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Manage forecast fields</DialogTitle>
+          <DialogTitle className="font-display">Manage forecast fields</DialogTitle>
           <DialogDescription>
             Add, rename, reorder, or remove the blocks shown on every week.
           </DialogDescription>
@@ -621,7 +802,7 @@ function ManageFieldsDialog({ fields }: { fields: ForecastField[] }) {
           ))}
         </div>
 
-        <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+        <div className="space-y-2 rounded-xl border bg-muted/30 p-3">
           <Label className="text-xs">Add new field</Label>
           <div className="flex gap-2">
             <Input
@@ -680,7 +861,7 @@ function FieldRow({
   useEffect(() => setLabel(field.label), [field.label]);
 
   return (
-    <div className="flex items-center gap-2 rounded-md border bg-card p-2">
+    <div className="flex items-center gap-2 rounded-lg border bg-card p-2">
       <div className="flex flex-col">
         <button
           onClick={onUp}
@@ -717,7 +898,11 @@ function FieldRow({
       </Select>
       <AlertDialog>
         <AlertDialogTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </AlertDialogTrigger>
@@ -738,6 +923,3 @@ function FieldRow({
     </div>
   );
 }
-
-// Suppress unused-import warning for weekKey (kept for potential future use)
-void weekKey;

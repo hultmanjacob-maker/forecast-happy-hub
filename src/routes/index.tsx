@@ -1278,7 +1278,7 @@ function RowSection({
   useEffect(() => setName(row.name), [row.name]);
 
   return (
-    <div>
+    <div className="group/row">
       <div className="mb-2 flex items-center gap-2">
         <span
           className="h-2 w-2 shrink-0 rounded-full"
@@ -1329,14 +1329,14 @@ function RowSection({
             <h3 className="font-display text-base font-bold text-foreground">{row.name}</h3>
             <button
               onClick={() => setEditing(true)}
-              className="rounded p-1 text-muted-foreground hover:text-foreground"
+              className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 hover:text-foreground"
               aria-label="Rename row"
             >
               <Pencil className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={onDelete}
-              className="rounded p-1 text-muted-foreground hover:text-destructive"
+              className="rounded p-1 text-muted-foreground opacity-0 transition-opacity group-hover/row:opacity-100 hover:text-destructive"
               aria-label="Delete row"
             >
               <Trash2 className="h-3.5 w-3.5" />

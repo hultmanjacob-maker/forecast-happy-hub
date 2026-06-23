@@ -729,18 +729,38 @@ function EmptyState({ title, body }: { title: string; body: string }) {
   );
 }
 
-function ManageFieldsDialog({ fields }: { fields: ForecastField[] }) {
+function ManageFieldsDialog({
+  fields,
+  rows,
+}: {
+  fields: ForecastField[];
+  rows: ForecastRow[];
+}) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [newType, setNewType] = useState<"number" | "text">("number");
+  const [newRowId, setNewRowId] = useState<string>("");
+
+  useEffect(() => {
+    if (!newRowId && rows[0]) setNewRowId(rows[0].id);
+  }, [rows, newRowId]);
 
   const addM = useMutation({
-    mutationFn: async (args: { label: string; field_type: "number" | "text" }) => {
+    mutationFn: async (args: {
+      label: string;
+      field_type: "number" | "text";
+      row_id: string | null;
+    }) => {
       const sort_order = (fields.at(-1)?.sort_order ?? 0) + 10;
       const { error } = await supabase
         .from("forecast_fields")
-        .insert({ label: args.label, field_type: args.field_type, sort_order });
+        .insert({
+          label: args.label,
+          field_type: args.field_type,
+          sort_order,
+          row_id: args.row_id,
+        });
       if (error) throw error;
     },
     onSuccess: () => {

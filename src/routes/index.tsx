@@ -324,19 +324,16 @@ function HeroHeader({
   week,
   onPrev,
   onNext,
-  onToday,
 }: {
   week: WeekId;
   onPrev: () => void;
   onNext: () => void;
-  onToday: () => void;
 }) {
   return (
     <header
       className="relative overflow-hidden text-[color:var(--cream)]"
       style={{ background: "var(--gradient-hero)" }}
     >
-      {/* gold orb */}
       <div
         aria-hidden
         className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full opacity-30 blur-3xl"
@@ -348,7 +345,7 @@ function HeroHeader({
         style={{ background: "linear-gradient(90deg, transparent, var(--gold), transparent)" }}
       />
 
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pt-10 pb-20 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:pt-14 sm:pb-24">
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 pt-10 pb-12 sm:flex-row sm:items-end sm:justify-between sm:px-6 sm:pt-14 sm:pb-14">
         <div>
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-[color:var(--gold)]">
             <span className="inline-block h-px w-6 bg-[color:var(--gold)]" />
@@ -391,13 +388,6 @@ function HeroHeader({
             className="text-[color:var(--cream)] hover:bg-white/10 hover:text-[color:var(--cream)]"
           >
             <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button
-            size="sm"
-            onClick={onToday}
-            className="ml-1 rounded-lg bg-[color:var(--gold)] text-[color:var(--gold-foreground)] hover:bg-[color:var(--gold)]/90"
-          >
-            Today
           </Button>
         </div>
       </div>

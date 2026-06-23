@@ -250,11 +250,10 @@ function ForecastPage() {
         week={week}
         onPrev={() => setWeek(prevWeek(week))}
         onNext={() => setWeek(nextWeek(week))}
-        onToday={() => setWeek(currentWeekId())}
       />
 
       <main className="mx-auto max-w-6xl px-4 pb-16 sm:px-6">
-        <section className="-mt-10 rounded-2xl border bg-card p-4 shadow-[var(--shadow-elegant)] sm:p-5">
+        <section className="relative z-10 mt-6 rounded-2xl border bg-card p-4 shadow-[var(--shadow-elegant)] sm:p-5">
           <SalespeopleTabs
             people={salespeopleQ.data ?? []}
             active={activeSalesperson}
@@ -287,33 +286,21 @@ function ForecastPage() {
                 </p>
               </div>
             </div>
-            <ManageFieldsDialog fields={fieldsQ.data ?? []} />
+            <ManageFieldsDialog fields={fieldsQ.data ?? []} rows={rowsQ.data ?? []} />
           </section>
         )}
 
         {activePerson && activeColor && (
-          <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {(fieldsQ.data ?? []).map((field) => {
-              const entry = entryMap.get(`${activePerson.id}:${field.id}`);
-              return (
-                <FieldCard
-                  key={field.id}
-                  field={field}
-                  entry={entry}
-                  accent={activeColor.solid}
-                  onSave={(value) =>
-                    saveEntry.mutate({ salespersonId: activePerson.id, field, value })
-                  }
-                />
-              );
-            })}
-            {fieldsQ.data && fieldsQ.data.length === 0 && (
-              <EmptyState
-                title="No forecast fields yet"
-                body='Click "Manage fields" above to add the blocks you want to track every week.'
-              />
-            )}
-          </section>
+          <RowsBoard
+            rows={rowsQ.data ?? []}
+            fields={fieldsQ.data ?? []}
+            activePerson={activePerson}
+            accent={activeColor.solid}
+            entryMap={entryMap}
+            onSaveEntry={(field, value) =>
+              saveEntry.mutate({ salespersonId: activePerson.id, field, value })
+            }
+          />
         )}
 
         {!activePerson && (

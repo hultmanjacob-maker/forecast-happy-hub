@@ -106,11 +106,13 @@ export const Route = createFileRoute("/")({
 });
 
 type Salesperson = { id: string; name: string; sort_order: number; color_index: number };
+type ForecastRow = { id: string; name: string; sort_order: number };
 type ForecastField = {
   id: string;
   label: string;
   field_type: "number" | "text";
   sort_order: number;
+  row_id: string | null;
 };
 type ForecastEntry = {
   id: string;
